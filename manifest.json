@@ -1,0 +1,19 @@
+{
+  "name": "旅跡 Wanderlog",
+  "short_name": "旅跡",
+  "description": "你的 Google Drive 旅行日記",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f3ee",
+  "theme_color": "#1a1512",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%231a1512'/><text x='96' y='130' text-anchor='middle' font-size='110' fill='%23c9923a'>跡</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["travel", "lifestyle"],
+  "lang": "zh-TW"
+}

@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旅跡 · 遊記本</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a1512">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600&family=DM+Serif+Display:ital@0;1&family=Noto+Sans+TC:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ══════════════════════════════════════════════════════════
+     ⚙️  GOOGLE CLIENT ID 設定
+     1. 前往 https://console.cloud.google.com/
+     2. 建立專案 → API 和服務 → 憑證 → 建立 OAuth 2.0 用戶端 ID
+     3. 應用程式類型選「網頁應用程式」
+     4. 已授權的 JavaScript 來源填入你的 GitHub Pages 網址
+        例：https://yourname.github.io
+        本機測試也加：http://localhost
+        http://127.0.0.1
+     5. 在 Google Cloud Console 啟用「Google Drive API」
+     6. 把 YOUR_CLIENT_ID 換成你的 Client ID
+     ══════════════════════════════════════════════════════════ -->
+<script>
+  const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+  const DRIVE_FOLDER_NAME = '旅跡Wanderlog';
+  const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+</script>
+
+<style>
+:root{
+  --ink:#1a1512;--paper:#f7f3ee;--paper2:#efe9e0;
+  --accent:#b85c2a;--accent2:#7a9e7e;--gold:#c9923a;
+  --muted:#8a7f74;--line:#d9d0c4;--shadow:rgba(26,21,18,0.08);
+  --sunny:#f5a623;--cloudy:#9aabb8;--rainy:#7b8fa6;--stormy:#5a4e6e;--snowy:#a8c8e8;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--paper);color:var(--ink);font-family:'Noto Sans TC',sans-serif;min-height:100vh;
+  background-image:radial-gradient(ellipse at 10% 20%,rgba(184,92,42,.04) 0%,transparent 60%),
+  radial-gradient(ellipse at 90% 80%,rgba(122,158,126,.05) 0%,transparent 60%);}
+
+/* ── AUTH ── */
+#auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:1.5rem;padding:2rem;}
+.auth-logo{font-family:'DM Serif Display',serif;font-size:4rem;color:var(--ink);}
+.auth-logo span{color:var(--gold);font-style:italic;}
+.auth-subtitle{color:var(--muted);font-size:15px;font-weight:300;letter-spacing:.05em;}
+.auth-note{font-size:12px;color:var(--muted);max-width:340px;text-align:center;line-height:1.7;background:var(--paper2);padding:12px 16px;border-radius:4px;border-left:3px solid var(--gold);}
+.google-btn{display:flex;align-items:center;gap:12px;background:white;border:1px solid var(--line);border-radius:4px;padding:12px 28px;font-size:15px;font-family:'Noto Sans TC',sans-serif;cursor:pointer;transition:all .2s;color:var(--ink);box-shadow:0 2px 8px var(--shadow);}
+.google-btn:hover{box-shadow:0 4px 16px var(--shadow);transform:translateY(-1px);}
+.google-btn img{width:20px;height:20px;}
+.google-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+#client-id-warning{display:none;background:#fff3cd;border:1px solid #f5c518;border-radius:4px;padding:12px 16px;font-size:13px;color:#856404;max-width:400px;text-align:center;line-height:1.7;}
+
+/* ── HEADER ── */
+header{background:var(--ink);color:var(--paper);padding:1.2rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:2000;box-shadow:0 2px 20px rgba(0,0,0,.3);flex-wrap:wrap;gap:8px;}
+.logo{font-family:'DM Serif Display',serif;font-size:1.8rem;letter-spacing:.02em;}
+.logo span{color:var(--gold);font-style:italic;}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.user-avatar{width:32px;height:32px;border-radius:50%;border:2px solid rgba(255,255,255,.3);}
+.user-name{font-size:13px;color:rgba(255,255,255,.7);}
+.btn{padding:8px 18px;border-radius:2px;font-size:13px;font-family:'Noto Sans TC',sans-serif;cursor:pointer;transition:all .2s;letter-spacing:.05em;border:none;}
+.btn-ghost{background:transparent;color:var(--paper);border:1px solid rgba(247,243,238,.3);}
+.btn-ghost:hover{background:rgba(247,243,238,.1);}
+.btn-primary{background:var(--accent);color:white;}
+.btn-primary:hover{background:#9e4d23;}
+.btn-save{background:var(--accent2);color:white;}
+.btn-save:hover{background:#6b8f6f;}
+.btn-pdf{background:var(--gold);color:white;}
+.btn-pdf:hover{background:#b07e2a;}
+.btn-danger{background:transparent;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.2);font-size:12px;padding:6px 12px;}
+.btn-danger:hover{color:white;border-color:rgba(255,255,255,.5);}
+
+/* ── LAYOUT ── */
+.container{max-width:1100px;margin:0 auto;padding:2rem 1.5rem 5rem;}
+#app{display:none;}
+#list-view{animation:fadeIn .4s ease;}
+#journal-view{display:none;animation:fadeIn .4s ease;}
+#day-view{display:none;animation:fadeIn .4s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.section-title{font-family:'DM Serif Display',serif;font-size:2rem;margin-bottom:.3rem;}
+.section-sub{color:var(--muted);font-size:13px;margin-bottom:2rem;font-weight:300;}
+
+/* ── JOURNAL CARDS ── */
+.journal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.5rem;}
+.journal-card{background:white;border:1px solid var(--line);border-radius:4px;overflow:hidden;cursor:pointer;transition:box-shadow .2s,transform .2s;position:relative;}
+.journal-card:hover{box-shadow:0 8px 30px var(--shadow);transform:translateY(-2px);}
+.card-thumb{height:150px;background:var(--paper2);overflow:hidden;}
+.card-thumb img{width:100%;height:100%;object-fit:cover;}
+.card-thumb-empty{height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;color:var(--line);}
+.card-body{padding:1rem 1.2rem 1.2rem;}
+.card-date{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.1em;margin-bottom:4px;}
+.card-title{font-family:'Noto Serif TC',serif;font-size:1.05rem;font-weight:600;margin-bottom:6px;line-height:1.4;}
+.card-meta{font-size:12px;color:var(--muted);}
+.card-del{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.9);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;color:var(--accent);}
+.journal-card:hover .card-del{opacity:1;}
+.new-card{border:2px dashed var(--line);border-radius:4px;min-height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s;gap:8px;}
+.new-card:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── TRIP HEADER ── */
+.trip-header{display:flex;align-items:flex-start;gap:1rem;margin-bottom:2rem;flex-wrap:wrap;}
+.trip-header-info{flex:1;min-width:200px;}
+.trip-title-input{font-family:'DM Serif Display',serif;font-size:2rem;border:none;border-bottom:2px solid var(--line);border-radius:0;padding:6px 0;background:transparent;width:100%;color:var(--ink);outline:none;margin-bottom:.5rem;}
+.trip-title-input:focus{border-bottom-color:var(--accent);}
+.trip-meta-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:.5rem;}
+.trip-meta-row input{border:1px solid var(--line);border-radius:2px;padding:7px 10px;font-size:13px;font-family:'Noto Sans TC',sans-serif;color:var(--ink);background:var(--paper);outline:none;flex:1;min-width:120px;}
+.trip-meta-row input:focus{border-color:var(--accent);}
+.trip-actions{display:flex;gap:8px;flex-shrink:0;}
+
+/* ── DAY CARDS ── */
+.days-label{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:1rem;}
+.days-grid{display:flex;flex-direction:column;gap:12px;margin-bottom:1.5rem;}
+.day-card{background:white;border:1px solid var(--line);border-radius:4px;padding:1.2rem 1.5rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:1rem;position:relative;}
+.day-card:hover{box-shadow:0 4px 20px var(--shadow);border-color:var(--accent);transform:translateX(4px);}
+.day-number{font-family:'DM Serif Display',serif;font-size:2rem;color:var(--line);line-height:1;flex-shrink:0;min-width:52px;}
+.day-card:hover .day-number{color:var(--accent);}
+.day-info{flex:1;}
+.day-date-text{font-size:12px;color:var(--muted);margin-bottom:3px;}
+.day-title-text{font-family:'Noto Serif TC',serif;font-size:1rem;font-weight:600;margin-bottom:4px;}
+.day-preview{font-size:13px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
+.day-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.day-badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--paper2);color:var(--muted);}
+.day-wx-icon{font-size:1.6rem;flex-shrink:0;}
+.day-del{position:absolute;top:10px;right:10px;background:none;border:none;color:var(--line);cursor:pointer;font-size:14px;opacity:0;transition:opacity .2s;}
+.day-card:hover .day-del{opacity:1;color:var(--accent);}
+.add-day-btn{border:2px dashed var(--line);border-radius:4px;padding:1rem;text-align:center;cursor:pointer;color:var(--muted);transition:all .2s;font-size:14px;}
+.add-day-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── DAY EDITOR ── */
+.day-editor-header{display:flex;align-items:center;gap:.8rem;margin-bottom:1.5rem;flex-wrap:wrap;}
+.breadcrumb{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.breadcrumb span{color:var(--ink);font-weight:500;}
+.back-btn{background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--muted);padding:6px;transition:color .2s;}
+.back-btn:hover{color:var(--ink);}
+.day-editor-actions{margin-left:auto;display:flex;gap:8px;}
+.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;}
+@media(max-width:768px){.editor-grid{grid-template-columns:1fr;}}
+.editor-panel{background:white;border:1px solid var(--line);border-radius:4px;padding:1.5rem;}
+.editor-panel.full-width{grid-column:1/-1;}
+.panel-label{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:1rem;}
+
+/* ── FORM ── */
+input[type=text],input[type=date],textarea,select{width:100%;border:1px solid var(--line);border-radius:2px;padding:10px 12px;font-family:'Noto Sans TC',sans-serif;font-size:14px;color:var(--ink);background:var(--paper);transition:border-color .2s;outline:none;}
+input[type=text]:focus,input[type=date]:focus,textarea:focus,select:focus{border-color:var(--accent);background:white;}
+.day-title-input{font-family:'Noto Serif TC',serif;font-size:1.3rem;font-weight:600;border:none;border-bottom:2px solid var(--line);border-radius:0;padding:6px 0;background:transparent;width:100%;margin-bottom:1rem;outline:none;color:var(--ink);}
+.day-title-input:focus{border-bottom-color:var(--accent);}
+.day-title-input::placeholder{color:var(--line);}
+textarea{resize:vertical;min-height:180px;line-height:1.8;}
+.date-label{font-size:12px;color:var(--muted);margin-bottom:4px;}
+.divider{height:1px;background:var(--line);margin:1rem 0;}
+
+/* ── WEATHER ── */
+.weather-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+@media(max-width:500px){.weather-grid{grid-template-columns:repeat(3,1fr);}}
+.weather-btn{border:1.5px solid var(--line);border-radius:6px;padding:10px 6px;cursor:pointer;text-align:center;transition:all .2s;background:var(--paper);font-family:'Noto Sans TC',sans-serif;}
+.weather-btn:hover{border-color:var(--accent);}
+.weather-btn.selected{background:rgba(0,0,0,.04);}
+.w-sunny{color:var(--sunny);}.w-sunny.selected{border-color:var(--sunny);}
+.w-cloudy{color:var(--cloudy);}.w-cloudy.selected{border-color:var(--cloudy);}
+.w-rainy{color:var(--rainy);}.w-rainy.selected{border-color:var(--rainy);}
+.w-stormy{color:var(--stormy);}.w-stormy.selected{border-color:var(--stormy);}
+.w-snowy{color:var(--snowy);}.w-snowy.selected{border-color:var(--snowy);}
+.w-icon{font-size:1.6rem;}.w-label{font-size:11px;margin-top:4px;color:var(--ink);}
+.temp-row{display:flex;gap:8px;margin-top:12px;}
+.temp-row>div{flex:1;}
+
+/* ── MAP ── */
+#day-map{width:100%;height:300px;border:1px solid var(--line);border-radius:2px;}
+.map-search-row{display:flex;gap:8px;margin-bottom:10px;}
+.map-search-row input{flex:1;}
+.map-search-row button{flex-shrink:0;}
+.map-search-results{display:none;background:white;border:1px solid var(--line);border-radius:2px;margin-bottom:8px;max-height:180px;overflow-y:auto;position:relative;z-index:1000;}
+.map-search-result{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;}
+.map-search-result:hover{background:var(--paper2);}
+.map-search-result:last-child{border-bottom:none;}
+.map-search-result .result-name{font-weight:500;margin-bottom:2px;}
+.map-search-result .result-sub{font-size:11px;color:var(--muted);}
+.map-hint{font-size:12px;color:var(--muted);margin-top:8px;font-style:italic;}
+.marker-list{margin-top:10px;}
+.marker-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--paper);border-radius:2px;margin-bottom:6px;font-size:13px;}
+.marker-name-input{flex:1;border:none;background:transparent;font-size:13px;color:var(--ink);padding:0;outline:none;font-family:'Noto Sans TC',sans-serif;}
+.marker-coord{font-size:11px;color:var(--line);}
+.marker-del-btn{background:none;border:none;cursor:pointer;color:var(--accent);font-size:14px;padding:0 4px;}
+.leaflet-container{font-family:'Noto Sans TC',sans-serif;}
+
+/* ── PHOTOS ── */
+.photo-dropzone{border:2px dashed var(--line);border-radius:4px;padding:1.5rem;text-align:center;cursor:pointer;transition:all .2s;color:var(--muted);}
+.photo-dropzone:hover,.photo-dropzone.drag-over{border-color:var(--accent);color:var(--accent);}
+.photo-dropzone input{display:none;}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:10px;}
+.photo-item{position:relative;aspect-ratio:1;border-radius:2px;overflow:hidden;cursor:pointer;}
+.photo-item img{width:100%;height:100%;object-fit:cover;transition:transform .2s;}
+.photo-item:hover img{transform:scale(1.05);}
+.photo-del{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:white;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;}
+.photo-item:hover .photo-del{opacity:1;}
+.upload-progress{font-size:12px;color:var(--accent2);margin-top:8px;text-align:center;min-height:20px;}
+
+/* ── LIGHTBOX ── */
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;align-items:center;justify-content:center;}
+.lightbox.active{display:flex;}
+.lightbox img{max-width:90vw;max-height:90vh;object-fit:contain;}
+.lightbox-close{position:absolute;top:20px;right:20px;color:white;font-size:2rem;cursor:pointer;background:none;border:none;}
+
+/* ── TOAST / SPINNER ── */
+.toast{position:fixed;bottom:2rem;right:2rem;background:var(--ink);color:var(--paper);padding:12px 20px;border-radius:2px;font-size:13px;transform:translateY(80px);opacity:0;transition:all .3s;z-index:9998;border-left:3px solid var(--accent2);}
+.toast.show{transform:translateY(0);opacity:1;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:4rem 2rem;color:var(--muted);grid-column:1/-1;}
+
+/* ── PRINT ── */
+@media print{
+  header,#auth-screen,.trip-actions,.day-editor-actions,.back-btn,.add-day-btn,.day-del,.card-del,.photo-dropzone,.photo-del,.btn,.toast,.lightbox,.map-search-row,.map-search-results{display:none!important;}
+  body{background:white;}
+  .container{padding:.5rem;}
+  #list-view,#journal-view{display:none!important;}
+  #day-view{display:block!important;}
+  .editor-panel{border:1px solid #ddd;page-break-inside:avoid;margin-bottom:1rem;}
+  #day-map{height:220px;}
+  .editor-grid{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ AUTH SCREEN ══ -->
+<div id="auth-screen">
+  <div class="auth-logo">旅<span>跡</span></div>
+  <div class="auth-subtitle">你的 Google Drive 旅行日記</div>
+  <div id="client-id-warning">
+    ⚠️ 尚未設定 Google Client ID<br>
+    請在 index.html 第一個 &lt;script&gt; 區塊填入你的 Client ID<br>
+    <a href="https://console.cloud.google.com/" target="_blank" style="color:#856404;">前往 Google Cloud Console →</a>
+  </div>
+  <button class="google-btn" id="sign-in-btn" onclick="signInGoogle()">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+    以 Google 帳號登入
+  </button>
+  <div class="auth-note">
+    登入後，資料將儲存於你的 Google Drive<br>
+    <strong>旅跡Wanderlog/</strong> 資料夾中<br>
+    照片與日記均存在你自己的雲端硬碟，不經過第三方伺服器
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+  <header>
+    <div class="logo">旅<span>跡</span></div>
+    <div class="header-right">
+      <img class="user-avatar" id="user-avatar" src="" alt="">
+      <span class="user-name" id="user-name"></span>
+      <button class="btn btn-ghost" onclick="showList()">📖 我的遊記</button>
+      <button class="btn btn-primary" onclick="newJournal()">＋ 新增旅程</button>
+      <button class="btn btn-danger" onclick="doSignOut()">登出</button>
+    </div>
+  </header>
+
+  <!-- LIST -->
+  <div class="container" id="list-view">
+    <div class="section-title">我的旅行足跡</div>
+    <div class="section-sub">資料儲存於你的 Google Drive · 隨時隨地存取</div>
+    <div class="journal-grid" id="journal-grid"></div>
+  </div>
+
+  <!-- JOURNAL -->
+  <div class="container" id="journal-view">
+    <div class="trip-header">
+      <div class="trip-header-info">
+        <input class="trip-title-input" id="trip-title" type="text" placeholder="旅程名稱…">
+        <div class="trip-meta-row">
+          <input type="text" id="trip-dest" placeholder="📍 目的地">
+          <input type="date" id="trip-start">
+          <input type="date" id="trip-end">
+        </div>
+      </div>
+      <div class="trip-actions">
+        <button class="btn btn-ghost" style="color:var(--ink);border-color:var(--line);" onclick="showList()">← 返回</button>
+        <button class="btn btn-save" onclick="saveTripMeta()">💾 儲存旅程</button>
+      </div>
+    </div>
+    <div class="days-label">📅 每日行程</div>
+    <div class="days-grid" id="days-grid"></div>
+    <div class="add-day-btn" onclick="addDay()">＋ 新增一天</div>
+  </div>
+
+  <!-- DAY EDITOR -->
+  <div class="container" id="day-view">
+    <div class="day-editor-header">
+      <button class="back-btn" onclick="showJournal()">←</button>
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <div class="day-editor-actions">
+        <button class="btn btn-pdf" onclick="exportPDF()">📄 匯出 PDF</button>
+        <button class="btn btn-save" onclick="saveDay()">💾 儲存</button>
+      </div>
+    </div>
+    <div class="editor-grid">
+      <!-- 標題 -->
+      <div class="editor-panel">
+        <div class="panel-label">📝 今日標題</div>
+        <input class="day-title-input" id="day-title" type="text" placeholder="今天的主題，例：漫步京都古街…">
+        <div class="date-label" style="margin-top:.5rem;">日期</div>
+        <input type="date" id="day-date">
+      </div>
+      <!-- 天氣 -->
+      <div class="editor-panel">
+        <div class="panel-label">🌤️ 今日天氣</div>
+        <div class="weather-grid" id="day-weather-grid">
+          <div class="weather-btn w-sunny" data-w="sunny" onclick="selectWeather('sunny')"><div class="w-icon">☀️</div><div class="w-label">晴天</div></div>
+          <div class="weather-btn w-cloudy" data-w="cloudy" onclick="selectWeather('cloudy')"><div class="w-icon">⛅</div><div class="w-label">多雲</div></div>
+          <div class="weather-btn w-rainy" data-w="rainy" onclick="selectWeather('rainy')"><div class="w-icon">🌧️</div><div class="w-label">下雨</div></div>
+          <div class="weather-btn w-stormy" data-w="stormy" onclick="selectWeather('stormy')"><div class="w-icon">⛈️</div><div class="w-label">雷暴</div></div>
+          <div class="weather-btn w-snowy" data-w="snowy" onclick="selectWeather('snowy')"><div class="w-icon">❄️</div><div class="w-label">下雪</div></div>
+        </div>
+        <div class="temp-row">
+          <div><div class="date-label">最高溫 (°C)</div><input type="text" id="day-temp-hi" placeholder="32"></div>
+          <div><div class="date-label">最低溫 (°C)</div><input type="text" id="day-temp-lo" placeholder="24"></div>
+          <div><div class="date-label">體感</div>
+            <select id="day-temp-feel">
+              <option value="">選擇</option>
+              <option>🥵 酷熱</option><option>😅 炎熱</option><option>😊 舒適</option><option>🌬️ 涼爽</option><option>🥶 寒冷</option>
+            </select>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <input type="text" id="day-weather-note" placeholder="天氣備註，例：午後陣雨…">
+      </div>
+      <!-- 日記 -->
+      <div class="editor-panel full-width">
+        <div class="panel-label">✍️ 今日日記</div>
+        <textarea id="day-desc" placeholder="記錄今天的所見所聞…"></textarea>
+      </div>
+      <!-- 地圖 -->
+      <div class="editor-panel full-width">
+        <div class="panel-label">🗺️ 今日地圖標記</div>
+        <div class="map-search-row">
+          <input type="text" id="map-search-input" placeholder="🔍 搜尋景點、地址、地名…"
+            onkeydown="if(event.key==='Enter')searchPlace()">
+          <button class="btn btn-save" onclick="searchPlace()">搜尋</button>
+        </div>
+        <div class="map-search-results" id="map-search-results"></div>
+        <div id="day-map"></div>
+        <p class="map-hint">搜尋景點或直接點擊地圖任意位置新增地標</p>
+        <div class="marker-list" id="day-marker-list"></div>
+      </div>
+      <!-- 照片 -->
+      <div class="editor-panel full-width">
+        <div class="panel-label">📷 今日照片</div>
+        <div class="photo-dropzone" id="day-dropzone"
+          onclick="document.getElementById('day-photo-input').click()">
+          <div style="font-size:1.8rem;margin-bottom:6px;">🖼️</div>
+          <div style="font-size:13px;">點擊或拖曳照片 → 自動上傳至 Google Drive</div>
+          <input type="file" id="day-photo-input" accept="image/*" multiple
+            onchange="handlePhotos(this.files)">
+        </div>
+        <div class="upload-progress" id="upload-progress"></div>
+        <div class="photo-grid" id="day-photo-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+const WX      = {sunny:'☀️',cloudy:'⛅',rainy:'🌧️',stormy:'⛈️',snowy:'❄️'};
+const WX_NAME = {sunny:'晴天',cloudy:'多雲',rainy:'下雨',stormy:'雷暴',snowy:'下雪'};
+
+let accessToken   = null;   // Google OAuth token
+let currentUser   = null;   // { name, email, picture }
+let rootFolderId  = null;   // Drive 根資料夾 id
+let journals      = [];     // 本地快取
+let currentJid    = null;
+let currentDid    = null;
+let dayWeather    = '';
+let dayMarkers    = [];
+let dayPhotos     = [];     // [{ driveId, webContentLink, thumbnailLink, name, localUrl }]
+let map = null, leafletMarkers = [], lightboxUrls = [];
+
+function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+
+// ══════════════════════════════════════════════════════════════
+//  AUTH — Google Identity Services (GIS)
+// ══════════════════════════════════════════════════════════════
+let tokenClient = null;
+
+window.addEventListener('load', () => {
+  // 未設定 Client ID 時顯示警告
+  if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID.apps.googleusercontent.com') {
+    document.getElementById('client-id-warning').style.display = 'block';
+    document.getElementById('sign-in-btn').disabled = true;
+    return;
+  }
+  // 試著從 sessionStorage 恢復 token（同一個分頁）
+  const saved = sessionStorage.getItem('wl_token');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed.expires_at > Date.now()) {
+        accessToken = parsed.token;
+        currentUser = parsed.user;
+        onSignedIn();
+        return;
+      }
+    } catch(e) {}
+  }
+  initTokenClient();
+});
+
+function initTokenClient() {
+  if (!window.google) { setTimeout(initTokenClient, 300); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { showToast('登入失敗：' + resp.error); return; }
+      accessToken = resp.access_token;
+      // 取得使用者資料
+      try {
+        const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: 'Bearer ' + accessToken }
+        });
+        currentUser = await r.json();
+        // 儲存 session（55 分鐘後過期，比 token 預設 1hr 短一點）
+        sessionStorage.setItem('wl_token', JSON.stringify({
+          token: accessToken,
+          user: currentUser,
+          expires_at: Date.now() + 55 * 60 * 1000
+        }));
+        onSignedIn();
+      } catch(e) { showToast('取得使用者資訊失敗'); }
+    }
+  });
+}
+
+function signInGoogle() {
+  if (!tokenClient) { initTokenClient(); setTimeout(signInGoogle, 500); return; }
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function doSignOut() {
+  if (accessToken && window.google?.accounts?.oauth2) {
+    google.accounts.oauth2.revoke(accessToken);
+  }
+  accessToken = null; currentUser = null; rootFolderId = null;
+  journals = []; currentJid = null; currentDid = null;
+  sessionStorage.removeItem('wl_token');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+async function onSignedIn() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('user-avatar').src = currentUser.picture || '';
+  document.getElementById('user-name').textContent = currentUser.name || '';
+  await ensureRootFolder();
+  showList();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DRIVE API HELPERS
+// ══════════════════════════════════════════════════════════════
+const DRIVE = 'https://www.googleapis.com/drive/v3';
+const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
+
+async function driveReq(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      Authorization: 'Bearer ' + accessToken,
+      ...(opts.headers || {})
+    }
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Drive API ${res.status}: ${err}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return res;
+}
+
+// 確保 Drive 根資料夾存在
+async function ensureRootFolder() {
+  const q = `name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const data = await driveReq(`${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id,name)`);
+  if (data.files && data.files.length) {
+    rootFolderId = data.files[0].id;
+  } else {
+    const res = await driveReq(`${DRIVE}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: DRIVE_FOLDER_NAME,
+        mimeType: 'application/vnd.google-apps.folder'
+      })
+    });
+    rootFolderId = res.id;
+  }
+}
+
+// 確保旅程子資料夾存在
+async function ensureJournalFolder(jid, title) {
+  const name = `${title||jid}`;
+  const q = `name='${name}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const data = await driveReq(`${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+  if (data.files && data.files.length) return data.files[0].id;
+  const res = await driveReq(`${DRIVE}/files`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [rootFolderId]
+    })
+  });
+  return res.id;
+}
+
+// 上傳 / 更新 JSON 檔（用於日記資料）
+async function saveJsonFile(name, data, parentId, existingFileId = null) {
+  const content = JSON.stringify(data, null, 2);
+  const blob = new Blob([content], { type: 'application/json' });
+  const meta = JSON.stringify({ name, mimeType: 'application/json', parents: existingFileId ? undefined : [parentId] });
+  const form = new FormData();
+  form.append('metadata', new Blob([meta], { type: 'application/json' }));
+  form.append('file', blob);
+  if (existingFileId) {
+    return driveReq(`${UPLOAD}/files/${existingFileId}?uploadType=multipart`, { method: 'PATCH', body: form });
+  } else {
+    return driveReq(`${UPLOAD}/files?uploadType=multipart`, { method: 'POST', body: form });
+  }
+}
+
+// 讀取 JSON 檔
+async function readJsonFile(fileId) {
+  const res = await driveReq(`${DRIVE}/files/${fileId}?alt=media`);
+  // res 已是 Response 物件（driveReq 在非 json content-type 時回傳 res）
+  if (res instanceof Response) return res.json();
+  return res;
+}
+
+// 上傳圖片至 Drive
+async function uploadImageToDrive(file, parentId) {
+  // 先壓縮
+  const compressed = await compressImage(file, 1280, 0.82);
+  const meta = JSON.stringify({ name: file.name, mimeType: 'image/jpeg', parents: [parentId] });
+  const form = new FormData();
+  form.append('metadata', new Blob([meta], { type: 'application/json' }));
+  form.append('file', compressed);
+  const res = await driveReq(`${UPLOAD}/files?uploadType=multipart&fields=id,name,webContentLink,thumbnailLink`, {
+    method: 'POST', body: form
+  });
+  // 設公開可讀（讓 <img src> 能顯示）
+  await driveReq(`${DRIVE}/files/${res.id}/permissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  });
+  // 取得可直接顯示的 URL
+  const info = await driveReq(`${DRIVE}/files/${res.id}?fields=id,name,webContentLink,thumbnailLink`);
+  return {
+    driveId: info.id,
+    name: info.name,
+    // webContentLink 需要登入，改用可公開存取的 thumbnail URL
+    webContentLink: `https://drive.google.com/uc?export=view&id=${info.id}`,
+    thumbnailLink: info.thumbnailLink || `https://drive.google.com/thumbnail?id=${info.id}&sz=w400`
+  };
+}
+
+async function deleteFileDrive(fileId) {
+  try {
+    await driveReq(`${DRIVE}/files/${fileId}`, { method: 'DELETE' });
+  } catch(e) { /* 忽略已刪除 */ }
+}
+
+// 壓縮圖片
+function compressImage(file, maxPx, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      c.toBlob(blob => resolve(blob), 'image/jpeg', quality);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DATA — journals 存在 Drive 根目錄的 journals_index.json
+// ══════════════════════════════════════════════════════════════
+let indexFileId = null;
+
+async function loadJournals() {
+  const q = `name='journals_index.json' and '${rootFolderId}' in parents and trashed=false`;
+  const data = await driveReq(`${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+  if (data.files && data.files.length) {
+    indexFileId = data.files[0].id;
+    journals = await readJsonFile(indexFileId);
+    if (!Array.isArray(journals)) journals = [];
+  } else {
+    journals = [];
+    indexFileId = null;
+  }
+}
+
+async function saveJournalsIndex() {
+  if (indexFileId) {
+    await saveJsonFile('journals_index.json', journals, rootFolderId, indexFileId);
+  } else {
+    const res = await saveJsonFile('journals_index.json', journals, rootFolderId);
+    indexFileId = res.id;
+  }
+}
+
+// 每個 journal 的 days 存在 Drive 子資料夾的 days_index.json
+async function loadDays(j) {
+  if (!j.daysFolderId) { j.days = []; return; }
+  const q = `name='days_index.json' and '${j.daysFolderId}' in parents and trashed=false`;
+  const data = await driveReq(`${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+  if (data.files && data.files.length) {
+    j.daysFileId = data.files[0].id;
+    j.days = await readJsonFile(j.daysFileId);
+    if (!Array.isArray(j.days)) j.days = [];
+  } else {
+    j.days = [];
+  }
+}
+
+async function saveDays(j) {
+  const saveable = (j.days || []).map(d => ({
+    id: d.id, title: d.title, date: d.date, order: d.order,
+    weather: d.weather, tempHi: d.tempHi, tempLo: d.tempLo,
+    tempFeel: d.tempFeel, weatherNote: d.weatherNote, desc: d.desc,
+    markers: d.markers || [],
+    photos: (d.photos || []).map(p => ({
+      driveId: p.driveId, name: p.name,
+      webContentLink: p.webContentLink, thumbnailLink: p.thumbnailLink
+    }))
+  }));
+  if (!j.daysFolderId) {
+    j.daysFolderId = await ensureJournalFolder(j.id, j.title);
+    await saveJournalsIndex();
+  }
+  if (j.daysFileId) {
+    await saveJsonFile('days_index.json', saveable, j.daysFolderId, j.daysFileId);
+  } else {
+    const res = await saveJsonFile('days_index.json', saveable, j.daysFolderId);
+    j.daysFileId = res.id;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  VIEWS
+// ══════════════════════════════════════════════════════════════
+function showView(v) {
+  ['list-view','journal-view','day-view'].forEach(id => {
+    document.getElementById(id).style.display = id === v ? 'block' : 'none';
+  });
+}
+function showList() {
+  destroyMap();
+  loadJournals().then(async () => {
+    // 載入每個旅程的 days
+    for (const j of journals) {
+      if (j.daysFolderId && !j.days) await loadDays(j);
+    }
+    renderList();
+    showView('list-view');
+  }).catch(e => showToast('載入失敗：' + e.message));
+}
+function showJournal() { destroyMap(); renderJournal(); showView('journal-view'); }
+function showDayEditor() { showView('day-view'); setTimeout(initMap, 150); }
+
+// ══════════════════════════════════════════════════════════════
+//  LIST
+// ══════════════════════════════════════════════════════════════
+function renderList() {
+  const grid = document.getElementById('journal-grid');
+  grid.innerHTML = '';
+  if (!journals.length) {
+    grid.innerHTML = `<div class="empty-state"><div style="font-size:3rem">✈️</div><div style="margin-top:1rem;font-size:15px;">還沒有旅程，新增第一段旅行吧！</div></div>`;
+  } else {
+    journals.forEach(j => {
+      const firstPhoto = (j.days||[]).flatMap(d=>(d.photos||[])).map(p=>p.thumbnailLink||p.webContentLink).find(Boolean);
+      const thumb = firstPhoto
+        ? `<img src="${firstPhoto}" alt="" crossorigin="anonymous" onerror="this.style.display='none'">`
+        : `<div class="card-thumb-empty">✈️</div>`;
+      const allWx = (j.days||[]).map(d=>WX[d.weather]||'').filter(Boolean).slice(0,4).join('');
+      const card = document.createElement('div');
+      card.className = 'journal-card';
+      card.innerHTML = `
+        <div class="card-thumb">${thumb}</div>
+        <div class="card-body">
+          <div class="card-date">${j.dateStart||''}${j.dateEnd?' → '+j.dateEnd:''} ${allWx}</div>
+          <div class="card-title">${j.title||'未命名旅程'}</div>
+          <div class="card-meta">📍 ${j.dest||'目的地未設定'} &nbsp;·&nbsp; ${(j.days||[]).length} 天</div>
+        </div>
+        <button class="card-del" onclick="deleteJournal('${j.id}',event)">✕</button>`;
+      card.onclick = () => openJournal(j.id);
+      grid.appendChild(card);
+    });
+  }
+  const nc = document.createElement('div');
+  nc.className = 'new-card';
+  nc.innerHTML = `<div style="font-size:2.5rem">＋</div><div style="font-size:14px;font-weight:300">新增旅程</div>`;
+  nc.onclick = newJournal;
+  grid.appendChild(nc);
+}
+
+async function newJournal() {
+  const j = { id: uid(), title:'', dest:'', dateStart:'', dateEnd:'', createdAt: Date.now(), days:[] };
+  journals.unshift(j);
+  await saveJournalsIndex();
+  openJournal(j.id);
+}
+
+async function openJournal(id) {
+  currentJid = id;
+  const j = journals.find(x => x.id === id);
+  if (!j.days) await loadDays(j);
+  document.getElementById('trip-title').value = j.title || '';
+  document.getElementById('trip-dest').value  = j.dest  || '';
+  document.getElementById('trip-start').value = j.dateStart || '';
+  document.getElementById('trip-end').value   = j.dateEnd   || '';
+  showJournal();
+}
+
+async function deleteJournal(id, e) {
+  e.stopPropagation();
+  if (!confirm('確定刪除這段旅程（含所有日記與照片）？')) return;
+  showToast('刪除中…');
+  const j = journals.find(x => x.id === id);
+  // 刪除 Drive 子資料夾
+  if (j && j.daysFolderId) await deleteFileDrive(j.daysFolderId);
+  journals = journals.filter(x => x.id !== id);
+  await saveJournalsIndex();
+  renderList();
+  showToast('✓ 已刪除');
+}
+
+async function saveTripMeta() {
+  const j = journals.find(x => x.id === currentJid); if (!j) return;
+  j.title     = document.getElementById('trip-title').value.trim() || '未命名旅程';
+  j.dest      = document.getElementById('trip-dest').value.trim();
+  j.dateStart = document.getElementById('trip-start').value;
+  j.dateEnd   = document.getElementById('trip-end').value;
+  await saveJournalsIndex();
+  showToast('✓ 旅程資訊已儲存');
+  renderJournal();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  JOURNAL
+// ══════════════════════════════════════════════════════════════
+function renderJournal() {
+  const j = journals.find(x => x.id === currentJid); if (!j) return;
+  document.getElementById('trip-title').value = j.title || '';
+  document.getElementById('trip-dest').value  = j.dest  || '';
+  document.getElementById('trip-start').value = j.dateStart || '';
+  document.getElementById('trip-end').value   = j.dateEnd   || '';
+  const grid = document.getElementById('days-grid');
+  grid.innerHTML = '';
+  (j.days || []).forEach((d, i) => {
+    const wxIcon = WX[d.weather] || '';
+    const photoCount  = (d.photos  || []).length;
+    const markerCount = (d.markers || []).length;
+    const div = document.createElement('div');
+    div.className = 'day-card';
+    div.innerHTML = `
+      <div class="day-number">Day ${i+1}</div>
+      <div class="day-info">
+        <div class="day-date-text">${d.date || '日期未設定'}</div>
+        <div class="day-title-text">${d.title || '（未命名）'}</div>
+        ${d.desc ? `<div class="day-preview">${d.desc}</div>` : ''}
+        <div class="day-badges">
+          ${d.weather ? `<span class="day-badge">${wxIcon} ${WX_NAME[d.weather]||''}${d.tempHi?' · '+d.tempHi+'°':''}${d.tempLo?'/'+d.tempLo+'°':''}</span>` : ''}
+          ${photoCount  ? `<span class="day-badge">📷 ${photoCount} 張</span>`  : ''}
+          ${markerCount ? `<span class="day-badge">📍 ${markerCount} 個地標</span>` : ''}
+        </div>
+      </div>
+      <div class="day-wx-icon">${wxIcon}</div>
+      <button class="day-del" onclick="deleteDay('${d.id}',event)">✕</button>`;
+    div.onclick = () => openDay(d.id);
+    grid.appendChild(div);
+  });
+}
+
+async function addDay() {
+  const j = journals.find(x => x.id === currentJid); if (!j) return;
+  let autoDate = '';
+  if (j.dateStart) {
+    const base = new Date(j.dateStart);
+    base.setDate(base.getDate() + (j.days || []).length);
+    autoDate = base.toISOString().split('T')[0];
+  }
+  const d = { id: uid(), title:'', date: autoDate, order: (j.days||[]).length,
+    weather:'', tempHi:'', tempLo:'', tempFeel:'', weatherNote:'', desc:'',
+    markers:[], photos:[] };
+  if (!j.days) j.days = [];
+  j.days.push(d);
+  await saveDays(j);
+  openDay(d.id);
+}
+
+async function deleteDay(did, e) {
+  e.stopPropagation();
+  if (!confirm('確定刪除這天的日記？')) return;
+  const j = journals.find(x => x.id === currentJid); if (!j) return;
+  // 刪除 Drive 上的照片
+  const d = j.days.find(x => x.id === did);
+  if (d && d.photos) {
+    for (const p of d.photos) if (p.driveId) await deleteFileDrive(p.driveId);
+  }
+  j.days = j.days.filter(x => x.id !== did);
+  await saveDays(j);
+  renderJournal();
+  showToast('✓ 已刪除');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DAY EDITOR
+// ══════════════════════════════════════════════════════════════
+function openDay(did) {
+  currentDid = did;
+  const j = journals.find(x => x.id === currentJid);
+  const d = j && j.days && j.days.find(x => x.id === did);
+  if (!j || !d) return;
+  dayWeather = d.weather || '';
+  dayMarkers = JSON.parse(JSON.stringify(d.markers || []));
+  dayPhotos  = [...(d.photos || [])];
+  document.getElementById('day-title').value        = d.title       || '';
+  document.getElementById('day-date').value         = d.date        || '';
+  document.getElementById('day-temp-hi').value      = d.tempHi      || '';
+  document.getElementById('day-temp-lo').value      = d.tempLo      || '';
+  document.getElementById('day-temp-feel').value    = d.tempFeel    || '';
+  document.getElementById('day-weather-note').value = d.weatherNote || '';
+  document.getElementById('day-desc').value         = d.desc        || '';
+  document.getElementById('upload-progress').textContent = '';
+  const idx = (j.days || []).findIndex(x => x.id === did);
+  document.getElementById('breadcrumb').innerHTML =
+    `<span>${j.title||'旅程'}</span> › <span>Day ${idx+1}${d.title?' · '+d.title:''}</span>`;
+  updateWeatherUI();
+  renderPhotoGrid();
+  showDayEditor();
+}
+
+async function saveDay() {
+  const j = journals.find(x => x.id === currentJid);
+  const d = j && j.days && j.days.find(x => x.id === currentDid);
+  if (!j || !d) return;
+  d.title       = document.getElementById('day-title').value.trim();
+  d.date        = document.getElementById('day-date').value;
+  d.weather     = dayWeather;
+  d.tempHi      = document.getElementById('day-temp-hi').value;
+  d.tempLo      = document.getElementById('day-temp-lo').value;
+  d.tempFeel    = document.getElementById('day-temp-feel').value;
+  d.weatherNote = document.getElementById('day-weather-note').value.trim();
+  d.desc        = document.getElementById('day-desc').value.trim();
+  d.markers     = dayMarkers.map(m => ({ lat: m.lat, lng: m.lng, name: m.name }));
+  d.photos      = dayPhotos.map(p => ({
+    driveId: p.driveId, name: p.name,
+    webContentLink: p.webContentLink, thumbnailLink: p.thumbnailLink
+  }));
+  await saveDays(j);
+  const idx = (j.days || []).findIndex(x => x.id === currentDid);
+  document.getElementById('breadcrumb').innerHTML =
+    `<span>${j.title||'旅程'}</span> › <span>Day ${idx+1}${d.title?' · '+d.title:''}</span>`;
+  showToast('✓ 日記已儲存至 Google Drive');
+}
+
+function exportPDF() {
+  saveDay().then(() => {
+    showToast('📄 準備匯出，請稍候…');
+    setTimeout(() => window.print(), 700);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WEATHER
+// ══════════════════════════════════════════════════════════════
+function selectWeather(w) {
+  dayWeather = dayWeather === w ? '' : w;
+  updateWeatherUI();
+}
+function updateWeatherUI() {
+  document.querySelectorAll('#day-weather-grid .weather-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.w === dayWeather);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAP + 景點搜尋
+// ══════════════════════════════════════════════════════════════
+function initMap() {
+  if (map) { map.remove(); map = null; leafletMarkers = []; }
+  const center = dayMarkers.length ? [dayMarkers[0].lat, dayMarkers[0].lng] : [23.5, 121];
+  const zoom   = dayMarkers.length ? 13 : 7;
+  map = L.map('day-map').setView(center, zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+  dayMarkers.forEach((_, i) => addLMarker(i));
+  renderMarkerList();
+  map.on('click', e => {
+    const idx = dayMarkers.length;
+    dayMarkers.push({ lat: e.latlng.lat, lng: e.latlng.lng, name: '地點 ' + (idx + 1) });
+    addLMarker(idx);
+    renderMarkerList();
+  });
+}
+
+function addLMarker(idx) {
+  const m = dayMarkers[idx];
+  const icon = L.divIcon({
+    html: `<div style="background:#b85c2a;color:white;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.3);border:2px solid white;"><span style="transform:rotate(45deg);font-size:11px;font-weight:700;">${idx+1}</span></div>`,
+    className: '', iconSize: [28, 28], iconAnchor: [14, 28]
+  });
+  const lm = L.marker([m.lat, m.lng], { icon }).addTo(map).bindPopup(m.name || '地點 ' + (idx + 1));
+  leafletMarkers.push(lm);
+}
+
+function refreshMarkers() {
+  leafletMarkers.forEach(m => map && map.removeLayer(m));
+  leafletMarkers = [];
+  dayMarkers.forEach((_, i) => addLMarker(i));
+}
+
+function removeMarker(idx) { dayMarkers.splice(idx, 1); refreshMarkers(); renderMarkerList(); }
+
+function renderMarkerList() {
+  const list = document.getElementById('day-marker-list');
+  if (!dayMarkers.length) { list.innerHTML = ''; return; }
+  list.innerHTML = dayMarkers.map((m, i) => `
+    <div class="marker-item">
+      <span style="color:var(--accent);font-weight:700;min-width:22px;">${i + 1}</span>
+      <input class="marker-name-input" value="${m.name || ''}"
+        onchange="dayMarkers[${i}].name=this.value;if(leafletMarkers[${i}])leafletMarkers[${i}].setPopupContent(this.value);"
+        placeholder="地點名稱">
+      <span class="marker-coord">${m.lat ? m.lat.toFixed(4)+','+m.lng.toFixed(4) : ''}</span>
+      <button class="marker-del-btn" onclick="removeMarker(${i})">✕</button>
+    </div>`).join('');
+}
+
+function destroyMap() { if (map) { map.remove(); map = null; leafletMarkers = []; } }
+
+// 景點搜尋（Nominatim）
+async function searchPlace() {
+  const q = document.getElementById('map-search-input').value.trim();
+  const resultsDiv = document.getElementById('map-search-results');
+  if (!q) { resultsDiv.style.display = 'none'; return; }
+  resultsDiv.style.display = 'block';
+  resultsDiv.innerHTML = '<div class="map-search-result">搜尋中…</div>';
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=6&accept-language=zh-TW`,
+      { headers: { 'Accept-Language': 'zh-TW,zh;q=0.9' } }
+    );
+    const data = await res.json();
+    if (!data.length) {
+      resultsDiv.innerHTML = '<div class="map-search-result">找不到相關地點</div>';
+      return;
+    }
+    resultsDiv.innerHTML = data.map(item => {
+      const main = item.display_name.split(',')[0];
+      const sub  = item.display_name.split(',').slice(1, 4).join(', ');
+      return `<div class="map-search-result"
+        onclick="selectSearchResult(${item.lat},${item.lon},'${main.replace(/'/g,"\\'")}')">
+        <div class="result-name">${main}</div>
+        <div class="result-sub">${sub}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    resultsDiv.innerHTML = '<div class="map-search-result">搜尋失敗，請檢查網路連線</div>';
+  }
+}
+
+function selectSearchResult(lat, lon, name) {
+  document.getElementById('map-search-results').style.display = 'none';
+  document.getElementById('map-search-input').value = '';
+  const idx = dayMarkers.length;
+  dayMarkers.push({ lat: parseFloat(lat), lng: parseFloat(lon), name });
+  addLMarker(idx);
+  renderMarkerList();
+  map.setView([lat, lon], 15);
+  if (leafletMarkers[idx]) leafletMarkers[idx].openPopup();
+}
+
+document.addEventListener('click', e => {
+  const rd = document.getElementById('map-search-results');
+  const si = document.getElementById('map-search-input');
+  if (rd && si && !rd.contains(e.target) && e.target !== si) {
+    rd.style.display = 'none';
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  PHOTOS → Google Drive
+// ══════════════════════════════════════════════════════════════
+async function handlePhotos(files) {
+  const prog = document.getElementById('upload-progress');
+  const j = journals.find(x => x.id === currentJid);
+  if (!j) return;
+
+  // 確保 Drive 資料夾存在
+  if (!j.daysFolderId) {
+    j.daysFolderId = await ensureJournalFolder(j.id, j.title);
+    await saveJournalsIndex();
+  }
+
+  const arr = Array.from(files);
+  let done = 0;
+  prog.innerHTML = `<span class="spinner"></span>上傳至 Google Drive 0/${arr.length}…`;
+
+  for (const file of arr) {
+    try {
+      const info = await uploadImageToDrive(file, j.daysFolderId);
+      dayPhotos.push({
+        driveId: info.driveId,
+        name: info.name,
+        webContentLink: info.webContentLink,
+        thumbnailLink: info.thumbnailLink,
+        localUrl: info.webContentLink   // 用於即時顯示
+      });
+      done++;
+      prog.innerHTML = done < arr.length
+        ? `<span class="spinner"></span>上傳中 ${done}/${arr.length}…`
+        : `✓ ${arr.length} 張照片已上傳至 Google Drive`;
+      renderPhotoGrid();
+    } catch(e) {
+      prog.textContent = `❌ 上傳失敗：${e.message}`;
+    }
+  }
+  setTimeout(() => { prog.textContent = ''; }, 4000);
+}
+
+function renderPhotoGrid() {
+  lightboxUrls = dayPhotos.map(p => p.webContentLink || p.localUrl);
+  document.getElementById('day-photo-grid').innerHTML = dayPhotos.map((p, i) => {
+    const src = p.thumbnailLink || p.webContentLink || p.localUrl || '';
+    return `<div class="photo-item" onclick="openLightbox(${i})">
+      <img src="${src}" alt="照片${i+1}" crossorigin="anonymous"
+        onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2290%22 height=%2290%22><rect fill=%22%23efe9e0%22 width=%2290%22 height=%2290%22/><text x=%2245%22 y=%2252%22 text-anchor=%22middle%22 font-size=%2228%22>🖼️</text></svg>'">
+      <button class="photo-del" onclick="removePhoto(${i},event)">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function removePhoto(idx, e) {
+  e.stopPropagation();
+  const p = dayPhotos[idx];
+  if (p && p.driveId) await deleteFileDrive(p.driveId);
+  dayPhotos.splice(idx, 1);
+  renderPhotoGrid();
+}
+
+function openLightbox(idx) {
+  document.getElementById('lightbox-img').src = lightboxUrls[idx] || '';
+  document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox() { document.getElementById('lightbox').classList.remove('active'); }
+
+// drag & drop
+const dz = document.getElementById('day-dropzone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  handlePhotos(e.dataTransfer.files);
+});
+
+// ══════════════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
