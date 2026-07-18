@@ -23,7 +23,7 @@
      6. 把 YOUR_CLIENT_ID 換成你的 Client ID
      ══════════════════════════════════════════════════════════ -->
 <script>
-  const GOOGLE_CLIENT_ID = '345729465604-r75qidv38872uif6tqgc4o6m40pbpua6.apps.googleusercontent.com';
+  const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
   const DRIVE_FOLDER_NAME = '旅跡Wanderlog';
   const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 </script>
@@ -474,7 +474,8 @@ async function onSignedIn() {
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 
-async function driveReq(url, opts = {}) {
+async function driveReq(url, opts = {}, _retry = false) {
+  await ensureToken();   // 若 token 快過期則先刷新
   const res = await fetch(url, {
     ...opts,
     headers: {
@@ -482,6 +483,11 @@ async function driveReq(url, opts = {}) {
       ...(opts.headers || {})
     }
   });
+  // 401 = token 被 Google 提前失效 → 強制刷新一次後重試
+  if (res.status === 401 && !_retry) {
+    tokenExpiresAt = 0;   // 強制讓 ensureToken 觸發刷新
+    return driveReq(url, opts, true);
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Drive API ${res.status}: ${err}`);
